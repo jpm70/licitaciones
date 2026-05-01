@@ -2,98 +2,108 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Buscador de Licitaciones - España</title>
+    <title>Buscador Pro - Tenders Guru</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; background-color: #f9fafb; }
-        .container { max-width: 700px; margin: 0 auto; }
-        .search-container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input { width: 70%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 16px; }
-        button { width: 25%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; float: right; }
-        button:hover { background: #1d4ed8; }
-        .result-item { background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #e5e7eb; }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
-        .badge-open { background: #dcfce7; color: #166534; }
-        .badge-closed { background: #fee2e2; color: #991b1b; }
-        .title { font-size: 18px; font-weight: bold; color: #111827; display: block; margin-bottom: 8px; }
-        .amount { color: #2563eb; font-weight: bold; }
-        #status { margin-bottom: 10px; font-size: 14px; color: #6b7280; }
-        .error-box { background: #fff1f2; color: #9f1239; padding: 15px; border-radius: 8px; border: 1px solid #fda4af; margin-bottom: 20px; display: none; }
+        body { font-family: sans-serif; padding: 30px; background: #f4f4f9; color: #333; line-height: 1.6; }
+        .container { max-width: 800px; margin: auto; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        button { padding: 12px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:disabled { background: #ccc; }
+        .card { background: white; padding: 20px; margin-bottom: 15px; border-radius: 8px; border-left: 5px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .open { border-left-color: #22c55e; }
+        .price { color: #2563eb; font-weight: bold; font-size: 1.2em; }
+        #log { font-size: 12px; color: #666; margin-bottom: 10px; font-family: monospace; }
+        .error-msg { color: #b91c1c; background: #fee2e2; padding: 15px; border-radius: 5px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Licitaciones Tenders Guru</h2>
+    <h1>Buscador de Licitaciones 🇪🇸</h1>
     
-    <div id="error-message" class="error-box"></div>
+    <div id="log">Estado: Esperando búsqueda...</div>
+    <div id="error-box" class="error-msg"></div>
 
-    <div class="search-container">
-        <input type="text" id="searchInput" placeholder="Escribe un tema (ej: servicios)">
-        <button onclick="buscar()">Buscar</button>
+    <div class="search-box">
+        <input type="text" id="keyword" placeholder="Ejemplo: madera, software, transporte...">
+        <button id="btn" onclick="iniciarBusqueda()">Buscar</button>
     </div>
 
-    <div id="status"></div>
     <div id="results"></div>
 </div>
 
 <script>
-    async function buscar() {
-        const query = document.getElementById('searchInput').value;
-        const resultsDiv = document.getElementById('results');
-        const statusDiv = document.getElementById('status');
-        const errorDiv = document.getElementById('error-message');
+    const log = (msg) => document.getElementById('log').innerText = "Estado: " + msg;
+    const errorBox = document.getElementById('error-box');
 
+    async function iniciarBusqueda() {
+        const query = document.getElementById('keyword').value;
         if (!query) return;
 
-        // Reset
-        resultsDiv.innerHTML = "";
-        errorDiv.style.display = "none";
-        statusDiv.innerText = "Conectando con la API...";
+        document.getElementById('btn').disabled = true;
+        document.getElementById('results').innerHTML = "Buscando...";
+        errorBox.style.display = "none";
 
-        // Usamos corsproxy.io que suele ser más estable para peticiones locales
-        const api = `https://tenders.guru/api/es/tenders?q=${encodeURIComponent(query)}`;
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(api)}`;
+        // Intentamos con varios proxies por si uno falla
+        const proxies = [
+            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            url => `https://thingproxy.freeboard.io/fetch/${url}`
+        ];
 
-        try {
-            const response = await fetch(proxyUrl);
-            
-            if (!response.ok) {
-                throw new Error(`Servidor respondió con código ${response.status}`);
+        let data = null;
+        const targetApi = `https://tenders.guru/api/es/tenders?q=${encodeURIComponent(query)}`;
+
+        for (let i = 0; i < proxies.length; i++) {
+            try {
+                log(`Intentando conexión (Método ${i + 1})...`);
+                const response = await fetch(proxies[i](targetApi));
+                
+                if (!response.ok) throw new Error("Respuesta no válida");
+                
+                data = await response.json();
+                if (data) break; // Si tenemos datos, salimos del bucle
+            } catch (e) {
+                console.error(`Fallo método ${i + 1}:`, e);
             }
-
-            const data = await response.json();
-            statusDiv.innerText = `Encontradas ${data.data.length} licitaciones.`;
-
-            data.data.forEach(t => {
-                const is_open = t.deadline_date && new Date(t.deadline_date) > new Date();
-                const div = document.createElement('div');
-                div.className = 'result-item';
-                div.innerHTML = `
-                    <span class="badge ${is_open ? 'badge-open' : 'badge-closed'}">
-                        ${is_open ? 'ABIERTA' : 'CERRADA'}
-                    </span>
-                    <a href="https://tenders.guru/es/tender/${t.id}" target="_blank" class="title">${t.title}</a>
-                    <div class="amount">${t.awarded_value > 0 ? t.awarded_value.toLocaleString() + ' €' : 'Importe no indicado'}</div>
-                    <div style="font-size:13px; color: #6b7280; margin-top:10px;">
-                        📅 Límite: ${t.deadline_date || 'N/A'} | 🏢 ${t.sid_awarder_name || 'Organismo desconocido'}
-                    </div>
-                `;
-                resultsDiv.appendChild(div);
-            });
-
-        } catch (err) {
-            console.error(err);
-            statusDiv.innerText = "";
-            errorDiv.style.display = "block";
-            errorDiv.innerHTML = `
-                <strong>Error de Red:</strong> No se pudo acceder a los datos.<br>
-                <small>Causa probable: Tu navegador bloquea la conexión por seguridad (CORS).</small><br><br>
-                <strong>Cómo solucionarlo:</strong><br>
-                1. Abre este archivo en <strong>Chrome</strong> o <strong>Edge</strong>.<br>
-                2. Intenta usar una ventana de <strong>Incógnito</strong>.<br>
-                3. Si el error persiste, prueba a buscar "limpieza" para descartar errores de la palabra.
-            `;
         }
+
+        if (data && data.data) {
+            render(data.data);
+            log("Resultados cargados con éxito.");
+        } else {
+            log("Error crítico.");
+            errorBox.style.display = "block";
+            errorBox.innerHTML = "No se pudo conectar con la API tras varios intentos. Esto suele pasar si la API de Tenders Guru está caída o bloqueando los servidores de proxy.";
+            document.getElementById('results').innerHTML = "";
+        }
+        document.getElementById('btn').disabled = false;
+    }
+
+    function render(items) {
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = items.length === 0 ? "No hay resultados." : "";
+        const hoy = new Date();
+
+        items.forEach(item => {
+            const esAbierta = item.deadline_date && new Date(item.deadline_date) > hoy;
+            const card = document.createElement('div');
+            card.className = `card ${esAbierta ? 'open' : ''}`;
+            card.innerHTML = `
+                <div style="margin-bottom:5px">
+                    <small style="color:${esAbierta ? 'green' : 'red'}; font-weight:bold">
+                        ${esAbierta ? '● ABIERTA' : '○ FINALIZADA'}
+                    </small>
+                </div>
+                <strong>${item.title}</strong><br>
+                <span class="price">${item.awarded_value > 0 ? item.awarded_value.toLocaleString() + '€' : 'Pendiente'}</span><br>
+                <small>📅 Límite: ${item.deadline_date || 'N/A'}</small><br>
+                <p style="font-size:0.9em; color:#555">${item.description ? item.description.substring(0, 150) + '...' : ''}</p>
+                <a href="https://tenders.guru/es/tender/${item.id}" target="_blank">Ver ficha completa</a>
+            `;
+            resultsDiv.appendChild(card);
+        });
     }
 </script>
 
