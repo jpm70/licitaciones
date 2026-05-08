@@ -2,109 +2,827 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Buscador Pro - Tenders Guru</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Licitaciones Públicas · España</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; padding: 30px; background: #f4f4f9; color: #333; line-height: 1.6; }
-        .container { max-width: 800px; margin: auto; }
-        .search-box { display: flex; gap: 10px; margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
-        button { padding: 12px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #ccc; }
-        .card { background: white; padding: 20px; margin-bottom: 15px; border-radius: 8px; border-left: 5px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .open { border-left-color: #22c55e; }
-        .price { color: #2563eb; font-weight: bold; font-size: 1.2em; }
-        #log { font-size: 12px; color: #666; margin-bottom: 10px; font-family: monospace; }
-        .error-msg { color: #b91c1c; background: #fee2e2; padding: 15px; border-radius: 5px; display: none; }
+        :root {
+            --ink: #0f1117;
+            --paper: #f5f1eb;
+            --cream: #ede8e0;
+            --accent: #c84b2f;
+            --accent-light: #f0d9d3;
+            --blue: #1a3a6b;
+            --blue-light: #dce6f5;
+            --muted: #7a7469;
+            --border: #d8d2c8;
+            --white: #fefcf8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background-color: var(--paper);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        /* HEADER */
+        header {
+            background: var(--ink);
+            color: var(--paper);
+            padding: 0 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            border-bottom: 3px solid var(--accent);
+        }
+
+        header .logo {
+            font-family: 'DM Serif Display', serif;
+            font-size: 22px;
+            letter-spacing: -0.5px;
+        }
+
+        header .logo span {
+            color: var(--accent);
+        }
+
+        header .source-badge {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--muted);
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 4px 10px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        /* HERO */
+        .hero {
+            background: var(--ink);
+            padding: 48px 40px 56px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            right: -60px;
+            top: -60px;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(200,75,47,0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(32px, 5vw, 52px);
+            color: var(--paper);
+            line-height: 1.1;
+            max-width: 600px;
+            margin-bottom: 8px;
+        }
+
+        .hero h1 em {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        .hero p {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 32px;
+            font-weight: 300;
+        }
+
+        /* SEARCH BAR */
+        .search-wrap {
+            display: flex;
+            gap: 0;
+            max-width: 620px;
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            overflow: hidden;
+            background: var(--white);
+        }
+
+        .search-wrap input {
+            flex: 1;
+            padding: 14px 18px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--ink);
+        }
+
+        .search-wrap input::placeholder {
+            color: #aaa;
+        }
+
+        .search-wrap button {
+            padding: 14px 24px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            font-family: 'DM Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+
+        .search-wrap button:hover { background: #b03d24; }
+        .search-wrap button:disabled { background: #888; cursor: not-allowed; }
+
+        /* FILTERS */
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .filter-pill {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            padding: 5px 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: all 0.15s;
+            background: transparent;
+            letter-spacing: 0.3px;
+        }
+
+        .filter-pill:hover, .filter-pill.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        /* MAIN CONTENT */
+        .main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 32px 40px 60px;
+        }
+
+        /* STATUS BAR */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .status-text {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .status-text strong {
+            color: var(--ink);
+        }
+
+        /* LOADING */
+        .loader {
+            display: none;
+            text-align: center;
+            padding: 60px 0;
+        }
+
+        .loader-dots {
+            display: inline-flex;
+            gap: 8px;
+        }
+
+        .loader-dots span {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: bounce 1.2s infinite;
+        }
+
+        .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .loader p {
+            margin-top: 16px;
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        /* RESULT CARD */
+        .result-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 24px 28px;
+            margin-bottom: 16px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            animation: fadeUp 0.3s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 20px rgba(200,75,47,0.08);
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .card-badge {
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 3px;
+            letter-spacing: 0.8px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .badge-open {
+            background: #dcfce7;
+            color: #14532d;
+            border: 1px solid #86efac;
+        }
+
+        .badge-closed {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border: 1px solid #fca5a5;
+        }
+
+        .badge-unknown {
+            background: var(--cream);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 17px;
+            color: var(--ink);
+            line-height: 1.35;
+            text-decoration: none;
+            display: block;
+            flex: 1;
+        }
+
+        .card-title:hover { color: var(--accent); }
+
+        .card-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px 20px;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--cream);
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .meta-label {
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .meta-value {
+            font-size: 13px;
+            color: var(--ink);
+            font-weight: 500;
+        }
+
+        .meta-value.amount {
+            color: var(--blue);
+            font-family: 'DM Mono', monospace;
+            font-size: 14px;
+        }
+
+        /* ERROR */
+        .error-card {
+            background: #fff8f7;
+            border: 1px solid #fca5a5;
+            border-left: 4px solid var(--accent);
+            border-radius: 6px;
+            padding: 24px 28px;
+        }
+
+        .error-card h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 18px;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .error-card p {
+            font-size: 14px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        /* EMPTY STATE */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.4;
+        }
+
+        .empty-state h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 24px;
+            color: var(--ink);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        /* WELCOME STATE */
+        .welcome-state {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .welcome-state .big-number {
+            font-family: 'DM Serif Display', serif;
+            font-size: 72px;
+            color: var(--cream);
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .welcome-state p {
+            color: var(--muted);
+            font-size: 14px;
+            max-width: 400px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        .welcome-state .hint-tags {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .hint-tag {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            padding: 6px 14px;
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--blue);
+            transition: all 0.15s;
+        }
+
+        .hint-tag:hover {
+            background: var(--blue-light);
+            border-color: var(--blue);
+        }
+
+        /* PAGINATION */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 32px;
+        }
+
+        .page-btn {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--white);
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--ink);
+            transition: all 0.15s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: var(--muted);
+            padding: 0 8px;
+        }
+
+        /* FOOTER */
+        footer {
+            text-align: center;
+            padding: 24px;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--muted);
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--blue); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        @media (max-width: 600px) {
+            header { padding: 0 20px; }
+            .hero { padding: 32px 20px 40px; }
+            .main { padding: 24px 20px 40px; }
+            .card-top { flex-direction: column-reverse; }
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Buscador de Licitaciones 🇪🇸</h1>
-    
-    <div id="log">Estado: Esperando búsqueda...</div>
-    <div id="error-box" class="error-msg"></div>
+<header>
+    <div class="logo">Licita<span>ES</span></div>
+    <div class="source-badge">PLACE · contrataciondelestado.es</div>
+</header>
 
-    <div class="search-box">
-        <input type="text" id="keyword" placeholder="Ejemplo: madera, software, transporte...">
-        <button id="btn" onclick="iniciarBusqueda()">Buscar</button>
+<div class="hero">
+    <h1>Licitaciones<br><em>públicas</em> abiertas</h1>
+    <p>Datos oficiales del Registro Público de Contratos · Ministerio de Hacienda</p>
+
+    <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="ej: limpieza, seguridad, consultoría, obras…" autocomplete="off">
+        <button id="searchBtn" onclick="buscar()">BUSCAR →</button>
     </div>
 
-    <div id="results"></div>
+    <div class="filters">
+        <span class="filter-pill" onclick="buscarTag('limpieza')">limpieza</span>
+        <span class="filter-pill" onclick="buscarTag('seguridad')">seguridad</span>
+        <span class="filter-pill" onclick="buscarTag('obras')">obras</span>
+        <span class="filter-pill" onclick="buscarTag('consultoría')">consultoría</span>
+        <span class="filter-pill" onclick="buscarTag('informática')">informática</span>
+        <span class="filter-pill" onclick="buscarTag('transporte')">transporte</span>
+    </div>
 </div>
 
+<div class="main">
+    <div id="status-bar" class="status-bar" style="display:none">
+        <div class="status-text" id="status-text"></div>
+        <div class="status-text" id="page-text"></div>
+    </div>
+
+    <div class="loader" id="loader">
+        <div class="loader-dots">
+            <span></span><span></span><span></span>
+        </div>
+        <p>Consultando datos abiertos de contratación…</p>
+    </div>
+
+    <div id="results">
+        <div class="welcome-state">
+            <div class="big-number">📋</div>
+            <p>Busca licitaciones públicas en curso o resueltas directamente desde la Plataforma de Contratación del Estado.</p>
+            <div class="hint-tags">
+                <span class="hint-tag" onclick="buscarTag('mantenimiento')">mantenimiento</span>
+                <span class="hint-tag" onclick="buscarTag('catering')">catering</span>
+                <span class="hint-tag" onclick="buscarTag('vigilancia')">vigilancia</span>
+                <span class="hint-tag" onclick="buscarTag('arquitectura')">arquitectura</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+        <button class="page-btn" id="prevBtn" onclick="cambiarPagina(-1)" disabled>← anterior</button>
+        <span class="page-info" id="pageInfo">1 / 1</span>
+        <button class="page-btn" id="nextBtn" onclick="cambiarPagina(1)">siguiente →</button>
+    </div>
+</div>
+
+<footer>
+    Datos procedentes de la <a href="https://contrataciondelestado.es" target="_blank">Plataforma de Contratación del Estado</a> (PLACE) · Ministerio de Hacienda · Datos abiertos sin registro ni clave de API
+</footer>
+
 <script>
-    const log = (msg) => document.getElementById('log').innerText = "Estado: " + msg;
-    const errorBox = document.getElementById('error-box');
+    // ─── Estado ───────────────────────────────────────────────────────────
+    let currentQuery = '';
+    let currentPage = 1;
+    const PAGE_SIZE = 10;
+    let allResults = [];
 
-    async function iniciarBusqueda() {
-        const query = document.getElementById('keyword').value;
-        if (!query) return;
+    // ─── Endpoint PLACE / fallback ────────────────────────────────────────
+    // La API REST pública de PLACE (OAI-PMH + Atom) no acepta parámetros de
+    // búsqueda textual directamente. Usamos el buscador open-data de PLACE
+    // vía el proxy abierto allorigins.win (sin registro, sin token).
+    // URL base: https://contrataciondelestado.es/wps/wcm/connect/PLACE_es/Site/area/docAccess
 
-        document.getElementById('btn').disabled = true;
-        document.getElementById('results').innerHTML = "Buscando...";
-        errorBox.style.display = "none";
+    const PLACE_SEARCH = (q, page) => {
+        const offset = (page - 1) * PAGE_SIZE;
+        // Endpoint de búsqueda abierto de PLACE (formato JSON-LD / Atom)
+        const url = `https://contrataciondelestado.es/wps/wcm/connect/PLACE_es/Site/area/docAccess?` +
+                    `tipo=3&subTipo=1&CPV=&nExpediente=&titulo=${encodeURIComponent(q)}&` +
+                    `orgContratacion=&importe=&fechaPublicacion=&estado=&` +
+                    `numPag=${page}&numElem=${PAGE_SIZE}&tipoBusqueda=1`;
+        return `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    };
 
-        // Intentamos con varios proxies por si uno falla
-        const proxies = [
-            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            url => `https://thingproxy.freeboard.io/fetch/${url}`
-        ];
+    // ─── Parseo de respuesta ──────────────────────────────────────────────
+    function parseResults(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
 
-        let data = null;
-        const targetApi = `https://tenders.guru/api/es/tenders?q=${encodeURIComponent(query)}`;
+        const rows = doc.querySelectorAll('tr.rowClass1, tr.rowClass2, tr[class*="row"]');
+        const results = [];
 
-        for (let i = 0; i < proxies.length; i++) {
-            try {
-                log(`Intentando conexión (Método ${i + 1})...`);
-                const response = await fetch(proxies[i](targetApi));
-                
-                if (!response.ok) throw new Error("Respuesta no válida");
-                
-                data = await response.json();
-                if (data) break; // Si tenemos datos, salimos del bucle
-            } catch (e) {
-                console.error(`Fallo método ${i + 1}:`, e);
-            }
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td');
+            if (cols.length < 3) return;
+
+            const linkEl = row.querySelector('a');
+            const title = linkEl ? linkEl.textContent.trim() : cols[0]?.textContent.trim();
+            const href = linkEl ? linkEl.getAttribute('href') : null;
+            const id = href ? href.split('idExpediente=')[1]?.split('&')[0] : null;
+
+            const text = row.textContent;
+            const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/g);
+            const amountMatch = text.match(/([\d.,]+)\s*€/);
+            const orgEl = cols[1] || cols[2];
+
+            if (!title || title.length < 5) return;
+
+            results.push({
+                id,
+                title,
+                url: href ? (href.startsWith('http') ? href : 'https://contrataciondelestado.es' + href) : null,
+                deadline: dateMatch ? dateMatch[0] : null,
+                amount: amountMatch ? amountMatch[1] : null,
+                organismo: orgEl ? orgEl.textContent.trim().substring(0, 80) : null,
+            });
+        });
+
+        // Intento alternativo: listas de definición
+        if (results.length === 0) {
+            const items = doc.querySelectorAll('.licitacionItem, .expediente, [class*="licitacion"], [class*="expedient"]');
+            items.forEach(item => {
+                const linkEl = item.querySelector('a');
+                const title = linkEl?.textContent.trim() || item.querySelector('h3,h4')?.textContent.trim();
+                if (!title) return;
+                const text = item.textContent;
+                const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/g);
+                const amountMatch = text.match(/([\d.,]+)\s*€/);
+                results.push({
+                    title,
+                    url: linkEl?.href || null,
+                    deadline: dateMatch ? dateMatch[0] : null,
+                    amount: amountMatch ? amountMatch[1] : null,
+                    organismo: null,
+                });
+            });
         }
 
-        if (data && data.data) {
-            render(data.data);
-            log("Resultados cargados con éxito.");
-        } else {
-            log("Error crítico.");
-            errorBox.style.display = "block";
-            errorBox.innerHTML = "No se pudo conectar con la API tras varios intentos. Esto suele pasar si la API de Tenders Guru está caída o bloqueando los servidores de proxy.";
-            document.getElementById('results').innerHTML = "";
-        }
-        document.getElementById('btn').disabled = false;
+        return results;
     }
 
-    function render(items) {
-        const resultsDiv = document.getElementById('results');
-        resultsDiv.innerHTML = items.length === 0 ? "No hay resultados." : "";
-        const hoy = new Date();
+    // ─── Helpers ──────────────────────────────────────────────────────────
+    function parseDate(str) {
+        if (!str) return null;
+        const [d, m, y] = str.split('/');
+        return new Date(`${y}-${m}-${d}`);
+    }
 
-        items.forEach(item => {
-            const esAbierta = item.deadline_date && new Date(item.deadline_date) > hoy;
+    function isOpen(deadline) {
+        if (!deadline) return null;
+        const d = parseDate(deadline);
+        return d && d > new Date();
+    }
+
+    function formatAmount(raw) {
+        if (!raw) return null;
+        const n = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+        if (isNaN(n)) return raw;
+        return n.toLocaleString('es-ES') + ' €';
+    }
+
+    // ─── Render ───────────────────────────────────────────────────────────
+    function renderResults(items) {
+        const div = document.getElementById('results');
+        div.innerHTML = '';
+
+        if (items.length === 0) {
+            div.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>Sin resultados</h3>
+                    <p>No se encontraron licitaciones para "<strong>${currentQuery}</strong>".<br>Prueba con otro término.</p>
+                </div>`;
+            return;
+        }
+
+        items.forEach((t, i) => {
+            const open = isOpen(t.deadline);
+            const badgeClass = open === null ? 'badge-unknown' : open ? 'badge-open' : 'badge-closed';
+            const badgeText = open === null ? 'SIN FECHA' : open ? 'ABIERTA' : 'CERRADA';
+
             const card = document.createElement('div');
-            card.className = `card ${esAbierta ? 'open' : ''}`;
+            card.className = 'result-card';
+            card.style.animationDelay = `${i * 40}ms`;
+
+            const titleHtml = t.url
+                ? `<a href="${t.url}" target="_blank" class="card-title">${t.title}</a>`
+                : `<span class="card-title">${t.title}</span>`;
+
             card.innerHTML = `
-                <div style="margin-bottom:5px">
-                    <small style="color:${esAbierta ? 'green' : 'red'}; font-weight:bold">
-                        ${esAbierta ? '● ABIERTA' : '○ FINALIZADA'}
-                    </small>
+                <div class="card-top">
+                    ${titleHtml}
+                    <span class="card-badge ${badgeClass}">${badgeText}</span>
                 </div>
-                <strong>${item.title}</strong><br>
-                <span class="price">${item.awarded_value > 0 ? item.awarded_value.toLocaleString() + '€' : 'Pendiente'}</span><br>
-                <small>📅 Límite: ${item.deadline_date || 'N/A'}</small><br>
-                <p style="font-size:0.9em; color:#555">${item.description ? item.description.substring(0, 150) + '...' : ''}</p>
-                <a href="https://tenders.guru/es/tender/${item.id}" target="_blank">Ver ficha completa</a>
+                <div class="card-meta">
+                    ${t.amount ? `
+                    <div class="meta-item">
+                        <span class="meta-label">Importe</span>
+                        <span class="meta-value amount">${formatAmount(t.amount)}</span>
+                    </div>` : ''}
+                    ${t.deadline ? `
+                    <div class="meta-item">
+                        <span class="meta-label">Fecha límite</span>
+                        <span class="meta-value">${t.deadline}</span>
+                    </div>` : ''}
+                    ${t.organismo ? `
+                    <div class="meta-item">
+                        <span class="meta-label">Organismo</span>
+                        <span class="meta-value">${t.organismo}</span>
+                    </div>` : ''}
+                </div>
             `;
-            resultsDiv.appendChild(card);
+            div.appendChild(card);
         });
     }
+
+    function updatePagination(total) {
+        const totalPages = Math.ceil(total / PAGE_SIZE);
+        const pagination = document.getElementById('pagination');
+        const pageInfo = document.getElementById('pageInfo');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+
+        if (totalPages <= 1) {
+            pagination.style.display = 'none';
+            return;
+        }
+
+        pagination.style.display = 'flex';
+        pageInfo.textContent = `${currentPage} / ${totalPages}`;
+        prevBtn.disabled = currentPage <= 1;
+        nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    // ─── Fetch ────────────────────────────────────────────────────────────
+    async function fetchPage(query, page) {
+        const url = PLACE_SEARCH(query, page);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        // allorigins devuelve { contents: "html string", status: {...} }
+        if (!json.contents) throw new Error('Respuesta vacía del proxy');
+        return json.contents;
+    }
+
+    // ─── Búsqueda principal ───────────────────────────────────────────────
+    async function buscar() {
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) return;
+
+        currentQuery = query;
+        currentPage = 1;
+        await ejecutarBusqueda();
+    }
+
+    async function ejecutarBusqueda() {
+        const btn = document.getElementById('searchBtn');
+        const loader = document.getElementById('loader');
+        const results = document.getElementById('results');
+        const statusBar = document.getElementById('status-bar');
+        const statusText = document.getElementById('status-text');
+        const pageText = document.getElementById('page-text');
+
+        btn.disabled = true;
+        loader.style.display = 'block';
+        results.innerHTML = '';
+        statusBar.style.display = 'none';
+        document.getElementById('pagination').style.display = 'none';
+
+        try {
+            const html = await fetchPage(currentQuery, currentPage);
+            const items = parseResults(html);
+
+            loader.style.display = 'none';
+            btn.disabled = false;
+
+            // Intentar extraer total de resultados del HTML
+            const totalMatch = html.match(/(\d+)\s*(?:resultado|licitacion|expedient)/i);
+            const totalEstimado = totalMatch ? parseInt(totalMatch[1]) : items.length;
+
+            statusBar.style.display = 'flex';
+            statusText.innerHTML = `<strong>${items.length}</strong> licitaciones encontradas`;
+            pageText.textContent = `pág. ${currentPage}`;
+
+            renderResults(items);
+
+            if (items.length === PAGE_SIZE) {
+                updatePagination(totalEstimado > PAGE_SIZE ? totalEstimado : PAGE_SIZE * 2);
+            }
+
+        } catch (err) {
+            loader.style.display = 'none';
+            btn.disabled = false;
+            console.error(err);
+
+            results.innerHTML = `
+                <div class="error-card">
+                    <h3>Error al obtener datos</h3>
+                    <p>
+                        No se pudo conectar con la Plataforma de Contratación del Estado.<br><br>
+                        <strong>Posibles causas:</strong><br>
+                        · El servidor de PLACE no está disponible en este momento<br>
+                        · El proxy abierto (allorigins.win) está caído o saturado<br>
+                        · Comprueba tu conexión a Internet<br><br>
+                        <strong>Alternativa directa:</strong>
+                        <a href="https://contrataciondelestado.es/wps/portal/plataforma" target="_blank" 
+                           style="color: var(--blue);">
+                            contrataciondelestado.es →
+                        </a>
+                    </p>
+                </div>`;
+        }
+    }
+
+    function cambiarPagina(delta) {
+        currentPage += delta;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        ejecutarBusqueda();
+    }
+
+    function buscarTag(tag) {
+        document.getElementById('searchInput').value = tag;
+        buscar();
+    }
+
+    // Enter para buscar
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') buscar();
+    });
 </script>
 
 </body>
