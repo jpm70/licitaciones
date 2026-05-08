@@ -496,7 +496,7 @@
 
 <header>
     <div class="logo">Licita<span>ES</span></div>
-    <div class="source-badge">PLACE · contrataciondelestado.es</div>
+    <div class="source-badge">PLACE · Feed Atom oficial · Hacienda</div>
 </header>
 
 <div class="hero">
@@ -552,35 +552,95 @@
 </div>
 
 <footer>
-    Datos agregados desde <a href="https://contrataciondelestado.es" target="_blank">PLACE</a> · Ministerio de Hacienda · vía <a href="https://tenders.guru/es" target="_blank">tenders.guru</a> · Sin registro ni API key
+    Datos oficiales del feed Atom de <a href="https://contrataciondelestado.es" target="_blank">PLACE</a> · Ministerio de Hacienda · Licencia datos abiertos · Sin registro ni API key
 </footer>
 
 <script>
     // ─── Estado ───────────────────────────────────────────────────────────
     let currentQuery = '';
     let currentPage = 1;
-    const PAGE_SIZE = 10;
+    const PAGE_SIZE = 15;
+    let allResults = [];   // resultados filtrados del feed en memoria
 
-    // ─── API: tenders.guru ────────────────────────────────────────────────
-    // Agrega datos oficiales de PLACE (contrataciondelestado.es).
-    // API pública, sin registro, sin token, con CORS abierto.
-    // Docs: https://tenders.guru/api/es
-    const API_URL = (q, page) =>
-        `https://tenders.guru/api/es/tenders?q=${encodeURIComponent(q)}&page=${page}`;
+    // ─── Fuente de datos: Feed Atom diario oficial de PLACE ───────────────
+    // Ministerio de Hacienda — datos abiertos, sin registro, sin API key.
+    // El feed sindicacion_1044 devuelve las licitaciones más recientes en XML Atom.
+    // Se carga una sola vez y se filtra localmente por texto.
+    // CORS: accedemos vía allorigins.win (proxy público, sin cuenta).
+    const FEED_URL = 'https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_1044.atom';
+    const PROXY    = url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+    let feedCache = null;   // cache del XML parseado para no recargar en cada búsqueda
+
+    // ─── Parseo del XML Atom de PLACE (formato CODICE 2.07) ───────────────
+    function parseFeedAtom(xmlString) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlString, 'application/xml');
+
+        const ns  = (el, tag) => el.getElementsByTagNameNS('*', tag);
+        const txt = (el, tag) => ns(el, tag)[0]?.textContent?.trim() || null;
+
+        return Array.from(doc.getElementsByTagNameNS('*', 'entry')).map(entry => {
+            const cfs   = ns(entry, 'ContractFolderStatus')[0];
+            const proj  = ns(entry, 'ProcurementProject')[0];
+            const budget= ns(entry, 'BudgetAmount')[0];
+            const party = ns(entry, 'LocatedContractingParty')[0];
+            const tender= ns(entry, 'TenderingProcess')[0];
+
+            const title = txt(entry, 'title') ||
+                          txt(proj, 'Name') ||
+                          txt(cfs, 'ContractFolderID') || '(sin título)';
+
+            // Importe: TaxExclusiveAmount (sin IVA) o TotalAmount
+            const importeStr = txt(budget, 'TaxExclusiveAmount') ||
+                               txt(budget, 'TotalAmount');
+            const importe = importeStr ? parseFloat(importeStr) : null;
+
+            // Fecha límite de presentación
+            const deadline = txt(tender, 'EndDate') ||
+                             txt(tender, 'PeriodEnd') ||
+                             txt(entry,  'updated');
+
+            // Organismo contratante
+            const organismo = txt(party, 'OfficialName') ||
+                              txt(party, 'Name') || null;
+
+            // Estado (PUB = publicada, ADJ = adjudicada, RES = resuelta…)
+            const estado = txt(cfs, 'ContractFolderStatusCode') || null;
+
+            // Link al detalle en PLACE
+            const linkEl = entry.querySelector('link[rel="alternate"], link');
+            const url = linkEl?.getAttribute('href') || null;
+
+            // Expediente
+            const expediente = txt(cfs, 'ContractFolderID') || null;
+
+            return { title, importe, deadline, organismo, estado, url, expediente };
+        });
+    }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-    function isOpen(deadline) {
-        if (!deadline) return null;
+    function isOpen(deadline, estado) {
+        // Estado PUB = publicada/activa. ADJ/RES/FOR/ANU = cerrada
+        if (estado && estado !== 'PUB' && estado !== 'PREV') return false;
+        if (!deadline) return estado === 'PUB' ? true : null;
         return new Date(deadline) > new Date();
     }
 
     function formatAmount(val) {
         if (!val || val <= 0) return null;
-        return Number(val).toLocaleString('es-ES') + ' €';
+        return Number(val).toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+    }
+
+    function formatDate(str) {
+        if (!str) return null;
+        try {
+            return new Date(str).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        } catch { return str; }
     }
 
     // ─── Render ───────────────────────────────────────────────────────────
-    function renderResults(items, meta) {
+    function renderResults(items) {
         const div = document.getElementById('results');
         div.innerHTML = '';
 
@@ -589,24 +649,24 @@
                 <div class="empty-state">
                     <div class="empty-icon">🔍</div>
                     <h3>Sin resultados</h3>
-                    <p>No se encontraron licitaciones para "<strong>${currentQuery}</strong>".<br>Prueba con otro término.</p>
+                    <p>No se encontraron licitaciones para "<strong>${currentQuery}</strong>" en el feed del día.<br>Prueba con otro término o consulta PLACE directamente.</p>
                 </div>`;
             return;
         }
 
         items.forEach((t, i) => {
-            const open = isOpen(t.deadline_date);
+            const open = isOpen(t.deadline, t.estado);
             const badgeClass = open === null ? 'badge-unknown' : open ? 'badge-open' : 'badge-closed';
-            const badgeText = open === null ? 'SIN FECHA' : open ? 'ABIERTA' : 'CERRADA';
-            const amount = formatAmount(t.awarded_value);
-            const url = t.id ? `https://tenders.guru/es/tender/${t.id}` : null;
+            const badgeText  = open === null ? 'SIN FECHA' : open ? 'ABIERTA' : 'CERRADA';
+            const amount  = formatAmount(t.importe);
+            const fechaFmt= formatDate(t.deadline);
 
             const card = document.createElement('div');
             card.className = 'result-card';
             card.style.animationDelay = `${i * 40}ms`;
 
-            const titleHtml = url
-                ? `<a href="${url}" target="_blank" class="card-title">${t.title}</a>`
+            const titleHtml = t.url
+                ? `<a href="${t.url}" target="_blank" class="card-title">${t.title}</a>`
                 : `<span class="card-title">${t.title}</span>`;
 
             card.innerHTML = `
@@ -617,35 +677,38 @@
                 <div class="card-meta">
                     ${amount ? `
                     <div class="meta-item">
-                        <span class="meta-label">Importe</span>
+                        <span class="meta-label">Importe (sin IVA)</span>
                         <span class="meta-value amount">${amount}</span>
                     </div>` : ''}
-                    ${t.deadline_date ? `
+                    ${fechaFmt ? `
                     <div class="meta-item">
-                        <span class="meta-label">Fecha límite</span>
-                        <span class="meta-value">${t.deadline_date}</span>
+                        <span class="meta-label">Actualización</span>
+                        <span class="meta-value">${fechaFmt}</span>
                     </div>` : ''}
-                    ${t.sid_awarder_name ? `
+                    ${t.organismo ? `
                     <div class="meta-item">
                         <span class="meta-label">Organismo</span>
-                        <span class="meta-value">${t.sid_awarder_name}</span>
+                        <span class="meta-value">${t.organismo}</span>
+                    </div>` : ''}
+                    ${t.expediente ? `
+                    <div class="meta-item">
+                        <span class="meta-label">Expediente</span>
+                        <span class="meta-value" style="font-family:'DM Mono',monospace;font-size:12px">${t.expediente}</span>
                     </div>` : ''}
                 </div>
             `;
             div.appendChild(card);
         });
-
-        // Paginación
-        if (meta && meta.last_page > 1) {
-            updatePagination(meta.last_page);
-        }
     }
 
-    function updatePagination(totalPages) {
+    function updatePagination(total) {
+        const totalPages = Math.ceil(total / PAGE_SIZE);
         const pagination = document.getElementById('pagination');
-        const pageInfo = document.getElementById('pageInfo');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo   = document.getElementById('pageInfo');
+        const prevBtn    = document.getElementById('prevBtn');
+        const nextBtn    = document.getElementById('nextBtn');
+
+        if (totalPages <= 1) { pagination.style.display = 'none'; return; }
 
         pagination.style.display = 'flex';
         pageInfo.textContent = `${currentPage} / ${totalPages}`;
@@ -653,31 +716,35 @@
         nextBtn.disabled = currentPage >= totalPages;
     }
 
-    // ─── Fetch ────────────────────────────────────────────────────────────
-    async function fetchPage(query, page) {
-        const resp = await fetch(API_URL(query, page));
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return await resp.json();
-        // Respuesta: { data: [...], meta: { current_page, last_page, total, ... } }
+    // ─── Carga del feed (con cache) ───────────────────────────────────────
+    async function loadFeed() {
+        if (feedCache) return feedCache;
+
+        const resp = await fetch(PROXY(FEED_URL));
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} al cargar el feed`);
+        const json = await resp.json();
+        if (!json.contents) throw new Error('Respuesta vacía del proxy');
+
+        feedCache = parseFeedAtom(json.contents);
+        return feedCache;
     }
 
-    // ─── Búsqueda principal ───────────────────────────────────────────────
+    // ─── Búsqueda: filtra el feed en memoria ─────────────────────────────
     async function buscar() {
         const query = document.getElementById('searchInput').value.trim();
         if (!query) return;
-
         currentQuery = query;
-        currentPage = 1;
+        currentPage  = 1;
         await ejecutarBusqueda();
     }
 
     async function ejecutarBusqueda() {
-        const btn = document.getElementById('searchBtn');
-        const loader = document.getElementById('loader');
-        const results = document.getElementById('results');
+        const btn       = document.getElementById('searchBtn');
+        const loader    = document.getElementById('loader');
+        const results   = document.getElementById('results');
         const statusBar = document.getElementById('status-bar');
-        const statusText = document.getElementById('status-text');
-        const pageText = document.getElementById('page-text');
+        const statusText= document.getElementById('status-text');
+        const pageText  = document.getElementById('page-text');
 
         btn.disabled = true;
         loader.style.display = 'block';
@@ -686,18 +753,30 @@
         document.getElementById('pagination').style.display = 'none';
 
         try {
-            const json = await fetchPage(currentQuery, currentPage);
-            const items = json.data || [];
-            const meta = json.meta || {};
+            const feed = await loadFeed();
+
+            // Filtro textual (título + organismo + expediente)
+            const q = currentQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            allResults = feed.filter(t => {
+                const hay = [t.title, t.organismo, t.expediente]
+                    .filter(Boolean).join(' ')
+                    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return hay.includes(q);
+            });
 
             loader.style.display = 'none';
             btn.disabled = false;
 
-            statusBar.style.display = 'flex';
-            statusText.innerHTML = `<strong>${meta.total ?? items.length}</strong> licitaciones encontradas`;
-            pageText.textContent = `pág. ${currentPage}`;
+            // Página actual
+            const start = (currentPage - 1) * PAGE_SIZE;
+            const page  = allResults.slice(start, start + PAGE_SIZE);
 
-            renderResults(items, meta);
+            statusBar.style.display = 'flex';
+            statusText.innerHTML = `<strong>${allResults.length}</strong> coincidencias en el feed del día`;
+            pageText.textContent  = `pág. ${currentPage}`;
+
+            renderResults(page);
+            updatePagination(allResults.length);
 
         } catch (err) {
             loader.style.display = 'none';
@@ -706,17 +785,15 @@
 
             results.innerHTML = `
                 <div class="error-card">
-                    <h3>Error al obtener datos</h3>
+                    <h3>No se pudo cargar el feed</h3>
                     <p>
-                        No se pudo conectar con el servicio de licitaciones.<br><br>
-                        <strong>Posibles causas:</strong><br>
-                        · El servidor no está disponible en este momento<br>
-                        · Comprueba tu conexión a Internet<br><br>
-                        <strong>Búsqueda directa en PLACE:</strong>
-                        <a href="https://contrataciondelestado.es/wps/portal/plataforma" target="_blank" 
-                           style="color: var(--blue);">
-                            contrataciondelestado.es →
-                        </a>
+                        El feed Atom de PLACE no está disponible ahora mismo.<br><br>
+                        <strong>Causas habituales:</strong><br>
+                        · El proxy allorigins.win está saturado (reintenta en unos segundos)<br>
+                        · El servidor de PLACE está en mantenimiento<br><br>
+                        <strong>Búsqueda directa:</strong>
+                        <a href="https://contrataciondelestado.es/wps/portal/plataforma" target="_blank"
+                           style="color:var(--blue)">contrataciondelestado.es →</a>
                     </p>
                 </div>`;
         }
@@ -724,8 +801,15 @@
 
     function cambiarPagina(delta) {
         currentPage += delta;
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const page  = allResults.slice(start, start + PAGE_SIZE);
+        const statusText = document.getElementById('status-text');
+        const pageText   = document.getElementById('page-text');
+        statusText.innerHTML = `<strong>${allResults.length}</strong> coincidencias en el feed del día`;
+        pageText.textContent  = `pág. ${currentPage}`;
+        renderResults(page);
+        updatePagination(allResults.length);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        ejecutarBusqueda();
     }
 
     function buscarTag(tag) {
