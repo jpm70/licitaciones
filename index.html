@@ -552,7 +552,7 @@
 </div>
 
 <footer>
-    Datos procedentes de la <a href="https://contrataciondelestado.es" target="_blank">Plataforma de Contratación del Estado</a> (PLACE) · Ministerio de Hacienda · Datos abiertos sin registro ni clave de API
+    Datos agregados desde <a href="https://contrataciondelestado.es" target="_blank">PLACE</a> · Ministerio de Hacienda · vía <a href="https://tenders.guru/es" target="_blank">tenders.guru</a> · Sin registro ni API key
 </footer>
 
 <script>
@@ -560,107 +560,31 @@
     let currentQuery = '';
     let currentPage = 1;
     const PAGE_SIZE = 10;
-    let allResults = [];
 
-    // ─── Endpoint PLACE / fallback ────────────────────────────────────────
-    // La API REST pública de PLACE (OAI-PMH + Atom) no acepta parámetros de
-    // búsqueda textual directamente. Usamos el buscador open-data de PLACE
-    // vía el proxy abierto allorigins.win (sin registro, sin token).
-    // URL base: https://contrataciondelestado.es/wps/wcm/connect/PLACE_es/Site/area/docAccess
-
-    const PLACE_SEARCH = (q, page) => {
-        const offset = (page - 1) * PAGE_SIZE;
-        // Endpoint de búsqueda abierto de PLACE (formato JSON-LD / Atom)
-        const url = `https://contrataciondelestado.es/wps/wcm/connect/PLACE_es/Site/area/docAccess?` +
-                    `tipo=3&subTipo=1&CPV=&nExpediente=&titulo=${encodeURIComponent(q)}&` +
-                    `orgContratacion=&importe=&fechaPublicacion=&estado=&` +
-                    `numPag=${page}&numElem=${PAGE_SIZE}&tipoBusqueda=1`;
-        return `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    };
-
-    // ─── Parseo de respuesta ──────────────────────────────────────────────
-    function parseResults(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-
-        const rows = doc.querySelectorAll('tr.rowClass1, tr.rowClass2, tr[class*="row"]');
-        const results = [];
-
-        rows.forEach(row => {
-            const cols = row.querySelectorAll('td');
-            if (cols.length < 3) return;
-
-            const linkEl = row.querySelector('a');
-            const title = linkEl ? linkEl.textContent.trim() : cols[0]?.textContent.trim();
-            const href = linkEl ? linkEl.getAttribute('href') : null;
-            const id = href ? href.split('idExpediente=')[1]?.split('&')[0] : null;
-
-            const text = row.textContent;
-            const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/g);
-            const amountMatch = text.match(/([\d.,]+)\s*€/);
-            const orgEl = cols[1] || cols[2];
-
-            if (!title || title.length < 5) return;
-
-            results.push({
-                id,
-                title,
-                url: href ? (href.startsWith('http') ? href : 'https://contrataciondelestado.es' + href) : null,
-                deadline: dateMatch ? dateMatch[0] : null,
-                amount: amountMatch ? amountMatch[1] : null,
-                organismo: orgEl ? orgEl.textContent.trim().substring(0, 80) : null,
-            });
-        });
-
-        // Intento alternativo: listas de definición
-        if (results.length === 0) {
-            const items = doc.querySelectorAll('.licitacionItem, .expediente, [class*="licitacion"], [class*="expedient"]');
-            items.forEach(item => {
-                const linkEl = item.querySelector('a');
-                const title = linkEl?.textContent.trim() || item.querySelector('h3,h4')?.textContent.trim();
-                if (!title) return;
-                const text = item.textContent;
-                const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/g);
-                const amountMatch = text.match(/([\d.,]+)\s*€/);
-                results.push({
-                    title,
-                    url: linkEl?.href || null,
-                    deadline: dateMatch ? dateMatch[0] : null,
-                    amount: amountMatch ? amountMatch[1] : null,
-                    organismo: null,
-                });
-            });
-        }
-
-        return results;
-    }
+    // ─── API: tenders.guru ────────────────────────────────────────────────
+    // Agrega datos oficiales de PLACE (contrataciondelestado.es).
+    // API pública, sin registro, sin token, con CORS abierto.
+    // Docs: https://tenders.guru/api/es
+    const API_URL = (q, page) =>
+        `https://tenders.guru/api/es/tenders?q=${encodeURIComponent(q)}&page=${page}`;
 
     // ─── Helpers ──────────────────────────────────────────────────────────
-    function parseDate(str) {
-        if (!str) return null;
-        const [d, m, y] = str.split('/');
-        return new Date(`${y}-${m}-${d}`);
-    }
-
     function isOpen(deadline) {
         if (!deadline) return null;
-        const d = parseDate(deadline);
-        return d && d > new Date();
+        return new Date(deadline) > new Date();
     }
 
-    function formatAmount(raw) {
-        if (!raw) return null;
-        const n = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-        if (isNaN(n)) return raw;
-        return n.toLocaleString('es-ES') + ' €';
+    function formatAmount(val) {
+        if (!val || val <= 0) return null;
+        return Number(val).toLocaleString('es-ES') + ' €';
     }
 
     // ─── Render ───────────────────────────────────────────────────────────
-    function renderResults(items) {
+    function renderResults(items, meta) {
         const div = document.getElementById('results');
         div.innerHTML = '';
 
-        if (items.length === 0) {
+        if (!items || items.length === 0) {
             div.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">🔍</div>
@@ -671,16 +595,18 @@
         }
 
         items.forEach((t, i) => {
-            const open = isOpen(t.deadline);
+            const open = isOpen(t.deadline_date);
             const badgeClass = open === null ? 'badge-unknown' : open ? 'badge-open' : 'badge-closed';
             const badgeText = open === null ? 'SIN FECHA' : open ? 'ABIERTA' : 'CERRADA';
+            const amount = formatAmount(t.awarded_value);
+            const url = t.id ? `https://tenders.guru/es/tender/${t.id}` : null;
 
             const card = document.createElement('div');
             card.className = 'result-card';
             card.style.animationDelay = `${i * 40}ms`;
 
-            const titleHtml = t.url
-                ? `<a href="${t.url}" target="_blank" class="card-title">${t.title}</a>`
+            const titleHtml = url
+                ? `<a href="${url}" target="_blank" class="card-title">${t.title}</a>`
                 : `<span class="card-title">${t.title}</span>`;
 
             card.innerHTML = `
@@ -689,38 +615,37 @@
                     <span class="card-badge ${badgeClass}">${badgeText}</span>
                 </div>
                 <div class="card-meta">
-                    ${t.amount ? `
+                    ${amount ? `
                     <div class="meta-item">
                         <span class="meta-label">Importe</span>
-                        <span class="meta-value amount">${formatAmount(t.amount)}</span>
+                        <span class="meta-value amount">${amount}</span>
                     </div>` : ''}
-                    ${t.deadline ? `
+                    ${t.deadline_date ? `
                     <div class="meta-item">
                         <span class="meta-label">Fecha límite</span>
-                        <span class="meta-value">${t.deadline}</span>
+                        <span class="meta-value">${t.deadline_date}</span>
                     </div>` : ''}
-                    ${t.organismo ? `
+                    ${t.sid_awarder_name ? `
                     <div class="meta-item">
                         <span class="meta-label">Organismo</span>
-                        <span class="meta-value">${t.organismo}</span>
+                        <span class="meta-value">${t.sid_awarder_name}</span>
                     </div>` : ''}
                 </div>
             `;
             div.appendChild(card);
         });
+
+        // Paginación
+        if (meta && meta.last_page > 1) {
+            updatePagination(meta.last_page);
+        }
     }
 
-    function updatePagination(total) {
-        const totalPages = Math.ceil(total / PAGE_SIZE);
+    function updatePagination(totalPages) {
         const pagination = document.getElementById('pagination');
         const pageInfo = document.getElementById('pageInfo');
         const prevBtn = document.getElementById('prevBtn');
         const nextBtn = document.getElementById('nextBtn');
-
-        if (totalPages <= 1) {
-            pagination.style.display = 'none';
-            return;
-        }
 
         pagination.style.display = 'flex';
         pageInfo.textContent = `${currentPage} / ${totalPages}`;
@@ -730,13 +655,10 @@
 
     // ─── Fetch ────────────────────────────────────────────────────────────
     async function fetchPage(query, page) {
-        const url = PLACE_SEARCH(query, page);
-        const resp = await fetch(url);
+        const resp = await fetch(API_URL(query, page));
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const json = await resp.json();
-        // allorigins devuelve { contents: "html string", status: {...} }
-        if (!json.contents) throw new Error('Respuesta vacía del proxy');
-        return json.contents;
+        return await resp.json();
+        // Respuesta: { data: [...], meta: { current_page, last_page, total, ... } }
     }
 
     // ─── Búsqueda principal ───────────────────────────────────────────────
@@ -764,25 +686,18 @@
         document.getElementById('pagination').style.display = 'none';
 
         try {
-            const html = await fetchPage(currentQuery, currentPage);
-            const items = parseResults(html);
+            const json = await fetchPage(currentQuery, currentPage);
+            const items = json.data || [];
+            const meta = json.meta || {};
 
             loader.style.display = 'none';
             btn.disabled = false;
 
-            // Intentar extraer total de resultados del HTML
-            const totalMatch = html.match(/(\d+)\s*(?:resultado|licitacion|expedient)/i);
-            const totalEstimado = totalMatch ? parseInt(totalMatch[1]) : items.length;
-
             statusBar.style.display = 'flex';
-            statusText.innerHTML = `<strong>${items.length}</strong> licitaciones encontradas`;
+            statusText.innerHTML = `<strong>${meta.total ?? items.length}</strong> licitaciones encontradas`;
             pageText.textContent = `pág. ${currentPage}`;
 
-            renderResults(items);
-
-            if (items.length === PAGE_SIZE) {
-                updatePagination(totalEstimado > PAGE_SIZE ? totalEstimado : PAGE_SIZE * 2);
-            }
+            renderResults(items, meta);
 
         } catch (err) {
             loader.style.display = 'none';
@@ -793,12 +708,11 @@
                 <div class="error-card">
                     <h3>Error al obtener datos</h3>
                     <p>
-                        No se pudo conectar con la Plataforma de Contratación del Estado.<br><br>
+                        No se pudo conectar con el servicio de licitaciones.<br><br>
                         <strong>Posibles causas:</strong><br>
-                        · El servidor de PLACE no está disponible en este momento<br>
-                        · El proxy abierto (allorigins.win) está caído o saturado<br>
+                        · El servidor no está disponible en este momento<br>
                         · Comprueba tu conexión a Internet<br><br>
-                        <strong>Alternativa directa:</strong>
+                        <strong>Búsqueda directa en PLACE:</strong>
                         <a href="https://contrataciondelestado.es/wps/portal/plataforma" target="_blank" 
                            style="color: var(--blue);">
                             contrataciondelestado.es →
