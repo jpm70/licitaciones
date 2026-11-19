@@ -1,0 +1,30 @@
+name: Actualizar licitaciones
+
+on:
+  schedule:
+    - cron: "10 */4 * * *"   # cada 4 horas
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-feed
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python tools/update_feed.py
+      - name: Commit si cambia
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add licitaciones.json
+          git diff --cached --quiet || (git commit -m "Actualizar licitaciones.json" && git push)
